@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 import pandas as pd
 import pyterrier as pt
 import shutil
@@ -21,6 +22,11 @@ def make_path(folder_to_create: str):
     os.makedirs(folder_path)
     return folder_path
 
+# parse html into plain text
+def parse_html(text):
+    soup = BeautifulSoup(text, 'lxml')
+    return soup.get_text()
+
 def json_to_df(path):
     """Convert json file to pandas dataframe, formatted for pyterrier
     
@@ -33,7 +39,8 @@ def json_to_df(path):
     with open('Answers.json', 'r', encoding='utf-8') as file:
         json_data = json.load(file)
     df = pd.DataFrame(json_data)
-    df = df.rename(columns={'Id': 'docno', 'Text': 'text'}) # pyterrier required format
+    df = df.rename(columns={'Id': 'docno', 'Text': 'text', 'Score': 'popularity'}) # pyterrier required format
+    df['text'] = df['text'].apply(parse_html)
     return df
 
 def df_to_indexes(df):
@@ -46,7 +53,7 @@ def df_to_indexes(df):
         index_ref: reference to indexes
     """
     index_location = make_path('index')
-    indexer = pt.IterDictIndexer(index_location)
+    indexer = pt.IterDictIndexer(index_location, meta={'docno': 10, 'text': 5000, 'popularity': 10})
     index_ref = indexer.index(df.to_dict(orient="records"))
     return index_ref
 
