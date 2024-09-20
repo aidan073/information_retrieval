@@ -1,12 +1,7 @@
-import pyterrier as pt
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import os
 
 stop_words = set(stopwords.words('english'))
-
-index = pt.IndexFactory.of(os.path.join(os.getcwd(), "index"))
-retriever = pt.terrier.Retriever(index, metadata=['docno', 'text', 'popularity'])
 
 def format_query(query):
     """Format query for searching
@@ -18,13 +13,9 @@ def format_query(query):
         filtered_query (str): query prepared for searching
     """
     tokens = word_tokenize(query)
-    filtered_query = ''
-    for token in tokens:
-        if not token.lower() in stop_words:
-            filtered_query += ' '+token.lower()
+    filtered_query = [token.lower() for token in tokens if token.isalpha() and token.lower() not in stop_words]
     
     return filtered_query
 
-query = format_query("Hello this is the best query")
-results = retriever.search(query)
-print(results[['docno', 'text', 'rank', 'score', 'popularity']])
+query = format_query("Hello, this is the best query!")
+print(query)

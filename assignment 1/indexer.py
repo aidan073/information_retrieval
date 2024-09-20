@@ -1,61 +1,45 @@
-from bs4 import BeautifulSoup
-import pandas as pd
-import pyterrier as pt
-import shutil
 import json
-import os
+from bs4 import BeautifulSoup
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from collections import Counter
 
-def make_path(folder_to_create: str):
-    """Create new folder in cwd
+stop_words = set(stopwords.words('english'))
 
-    Args:
-        folder_to_create (str): name of folder to create in cwd
+class Indexer:
+    def __init__(self, file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            self.documents = json.load(f)
 
-    Returns:
-        index_location (str): file path of new folder
-    """
-    folder_path = os.path.join(os.getcwd(), folder_to_create)
-
-    if os.path.exists(folder_path):
-        shutil.rmtree(folder_path)
-
-    os.makedirs(folder_path)
-    return folder_path
-
-# parse html into plain text
-def parse_html(text):
-    soup = BeautifulSoup(text, 'lxml')
-    return soup.get_text()
-
-def json_to_df(path):
-    """Convert json file to pandas dataframe, formatted for pyterrier
+    def process_text(self, text):
+        soup = BeautifulSoup(text, 'lxml')
+        text = soup.get_text()
+        tokens = word_tokenize(text)
+        tokens = [token.lower() for token in tokens if token.isalpha() and token.lower() not in stop_words]
+        bow = Counter(tokens)
+        return bow
     
-    Args:
-        path (str): path to json file
+    def index_docs(self):
+        for document in self.documents:
+            bow = self.process_text(document.get('Text'))
+            document['Text'] = bow
+    
+    def get_doc(self, doc_id):
+        return self.documents.get(doc_id)
+    
+    def search_keyword(self, keyword):
+        results = []
+        for document in self.documents:
+            if keyword.lower() in document.get('Text'):
+                results.append(document.get['Id'])
 
-    Returns:
-        df (dataframe): pandas dataframe
-    """
-    with open('Answers.json', 'r', encoding='utf-8') as file:
-        json_data = json.load(file)
-    df = pd.DataFrame(json_data)
-    df = df.rename(columns={'Id': 'docno', 'Text': 'text', 'Score': 'popularity'}) # pyterrier required format
-    df['text'] = df['text'].apply(parse_html)
-    return df
+        return results
+    
+    def save_index(self, outfile_path):
+        with open(outfile_path, 'w') as f:
+            json.dump(self.documents, f, indent=4)
 
-def df_to_indexes(df):
-    """Convert df to indexes
-
-    Args:
-        df (dataframe): pandas dataframe
-
-    Returns:
-        index_ref: reference to indexes
-    """
-    index_location = make_path('index')
-    indexer = pt.IterDictIndexer(index_location, meta={'docno': 10, 'text': 5000, 'popularity': 10})
-    index_ref = indexer.index(df.to_dict(orient="records"))
-    return index_ref
-
-df = json_to_df('Answers.json')
-index_ref = df_to_indexes(df)
+if __name__ == "__main__":
+    indexer = Indexer('Answers.json')
+    indexer.index_docs()
+    indexer.save_index('Index.json')
