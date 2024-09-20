@@ -27,13 +27,13 @@ class Indexer:
     def get_doc(self, doc_id):
         return self.documents.get(doc_id)
     
-    def search_keyword(self, keyword):
-        results = []
+    def search(self, query):
+        results = {}
         for document in self.documents:
-            if keyword.lower() in document.get('Text'):
-                results.append(document.get['Id'])
-
-        return results
+            for term in query:
+                if term in document.get('Text'):
+                    results[document['Id']] = results.get(document['Id'], 0) + document['Text'][term]
+        return sorted(results, key=results.get, reverse=True)
     
     def save_index(self, outfile_path):
         with open(outfile_path, 'w') as f:
