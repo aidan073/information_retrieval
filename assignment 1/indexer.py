@@ -2,7 +2,6 @@ import json
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from collections import Counter
 
 stop_words = set(stopwords.words('english'))
 
@@ -21,9 +20,13 @@ class Indexer:
     
     def custom_BOW(self, tokens, token_limit, counter_limit):
         bow = {}
+        token_count = 0
         for token in tokens:
+            if token_count > token_limit:
+                break
             if bow.get(token, 0) < counter_limit:
                 bow[token] = bow.get(token, 0) + 1
+                token_count+=1
         return bow
 
     def index_docs(self):
@@ -42,12 +45,14 @@ class Indexer:
     def search(self, query):
         results = {}
         for document in self.documents:
+            if document['Id'] == '95310':
+                pass
             results[document['Id']] = 0
             if len(document['Text']) > 5: # only consider documents with greater than 5 unique tokens (may need to be higher)
                 for term in query:
                     if term in document.get('Text'):
                         results[document['Id']] = results[document['Id']] + document['Text'][term]
-                results[document['Id']] = self.compute_score(results[document['Id']], sum(document['Text'].values()), 300, 0.9) 
+                results[document['Id']] = self.compute_score(results[document['Id']], sum(document['Text'].values()), 300, 0.7) 
         return dict(sorted(results.items(), key=lambda item: item[1], reverse=True))
     
     def save_index(self, outfile_path):
