@@ -45,14 +45,14 @@ class Indexer:
     def search(self, query):
         results = {}
         for document in self.documents:
-            if document['Id'] == '95310':
+            if document['Id'] == '49165':
                 pass
             results[document['Id']] = 0
             if len(document['Text']) > 5: # only consider documents with greater than 5 unique tokens (may need to be higher)
                 for term in query:
                     if term in document.get('Text'):
                         results[document['Id']] = results[document['Id']] + document['Text'][term]
-                results[document['Id']] = self.compute_score(results[document['Id']], sum(document['Text'].values()), 300, 0.7) 
+                results[document['Id']] = self.compute_score(results[document['Id']], sum(document['Text'].values()), 300, .9) 
         return dict(sorted(results.items(), key=lambda item: item[1], reverse=True))
     
     def save_index(self, outfile_path):
