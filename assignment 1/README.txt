@@ -1,5 +1,5 @@
 - Ensure all requirements in requirements.txt are installed.
-- Place assignment1.py, indexer.py, Answers.json, and index.json into a directory.
-- Index.json is included in the submission, but can be obtained again by running indexer.py from the directory.
+- Place assignment1.py, indexer.py, Answers.json, topics_1.json, and topics_2.json into the same directory.
+- Run indexer.py from the directory to obtain the index.
 - Change the last line in assignment1.py to pass the name of the topics.json file, and the desired output file name. 
 - Run assignment1.py from the directory to obtain results.
