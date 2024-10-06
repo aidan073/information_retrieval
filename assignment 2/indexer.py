@@ -32,22 +32,18 @@ def collect_vocab(doc_text, vocab, df_dict, corpus_length):
     return doc_tf, corpus_length
 
 def getTFIDF(tf_dict, df_dict, total_docs, token_count):
-    tfidf_dict = {term: (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1) for term in tf_dict.keys()}
+    tfidf_dict = {term: (0 if token_count == 0 else (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1)) for term in tf_dict.keys()}
     return tfidf_dict
 
-def getBM25(term, document, corpus, avg_doc_length, k1=1.5, b=0.75):
-    tf = term_frequency(term, document)
-    idf = inverse_document_frequency(term, corpus)
-    
-    doc_length = len(document)
-    
-    # Apply BM25 formula
-    numerator = tf * (k1 + 1)
-    denominator = tf + k1 * (1 - b + b * (doc_length / avg_doc_length))
-    
-    return idf * (numerator / denominator)
+def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, k1=1.5, b=0.75):
+    bm25_dict = {}
+    for term in tf_dict:
+        numerator = tf_dict[term] * (k1 + 1)
+        denominator = tf_dict[term] + k1 * (1 - b + b * (doc_length / avg_doc_length))
+        bm25_dict[term] = math.log((total_docs - df_dict[term] + 0.5) / (df_dict[term] + 0.5) + 1) * (numerator / denominator)
+    return bm25_dict
 
-def getVectors(vocab, doc_tfidf = None, ):
+def getVectors(vocab, doc_tfidf = None):
     doc_vecs = {}
     index = 0
     for term in vocab:
@@ -60,21 +56,27 @@ def getVectors(vocab, doc_tfidf = None, ):
                     
 def index(docs):
     vocab = []
+    doc_lengths = []
     avg_doc_length = []
     df_dict = {}
     doc_tfidf = {}
+    doc_bm25 = {}
     corpus_length = 0
     for doc in docs:
         text = process_text(doc['Text'])
         if len(text) == 0:
-            raise Exception(f"Empty body in document id: {doc['Id']}")
-        avg_doc_length.append(len(text))
+            pass
+            #raise Exception(f"Empty body in document id: {doc['Id']}")
+        doc_lengths.append(len(text))
         tf_dict, corpus_length = collect_vocab(text, vocab, df_dict, corpus_length)
         doc_tfidf[doc['Id']] = tf_dict
-    avg_doc_length = sum(avg_doc_length) / len(avg_doc_length)
+    avg_doc_length = sum(doc_lengths) / len(doc_lengths)
+    doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
         token_count = sum(tf_dict.values())
         doc_tfidf[doc_id] = getTFIDF(tf_dict, df_dict, len(docs), token_count)
+        doc_bm25[doc_id] = getBM25(tf_dict, df_dict, doc_lengths[doc_num], avg_doc_length, len(docs))
+        doc_num += 1
 
 def save_index(docs, vocab, outfile_path):
     docs.append(vocab)
