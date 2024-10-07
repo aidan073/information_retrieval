@@ -30,16 +30,20 @@ def collect_vocab(doc_text, vocab, df_dict):
         doc_tf[token] = doc_tf.get(token, 0) + 1
     return doc_tf
 
+def termTFIDF(term, tf_dict, df_dict, total_docs, token_count):
+    return (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1)
+
 def getTFIDF(tf_dict, df_dict, total_docs, token_count):
-    tfidf_dict = {term: (0 if token_count == 0 else (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1)) for term in tf_dict.keys()}
+    tfidf_dict = {term: (0 if token_count == 0 else termTFIDF(term, tf_dict, df_dict, total_docs, token_count)) for term in tf_dict}
     return tfidf_dict
 
-def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count, k1=1.5, b=0.75):
-    bm25_dict = {}
-    for term in tf_dict:
-        numerator = (tf_dict[term] / token_count) * (k1 + 1)
-        denominator = (tf_dict[term] / token_count) + k1 * (1 - b + b * (doc_length / avg_doc_length))
-        bm25_dict[term] = math.log((total_docs - df_dict[term] + 0.5) / (df_dict[term] + 0.5) + 1) * (numerator / denominator)
+def termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count, k1=1.5, b=0.75):
+    numerator = (tf_dict[term] / token_count) * (k1 + 1)
+    denominator = (tf_dict[term] / token_count) + k1 * (1 - b + b * (doc_length / avg_doc_length))
+    return math.log((total_docs - df_dict[term] + 0.5) / (df_dict[term] + 0.5) + 1) * (numerator / denominator)
+
+def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count):
+    bm25_dict = {term: termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count) for term in tf_dict}
     return bm25_dict
 
 def getVectors(vocab, doc_tfidf, doc_bm25):
