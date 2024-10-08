@@ -2,10 +2,16 @@ import json
 import pickle
 import math
 import sys
+import random
 import numpy as np
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from scipy.sparse import dok_matrix, csr_matrix
+from sklearn.metrics.pairwise import cosine_similarity
+from nltk.stem import PorterStemmer
+
+stemmer = PorterStemmer()
 
 stop_words = set(stopwords.words('english'))
 
@@ -18,17 +24,22 @@ def process_text(text): # pre-process text
     soup = BeautifulSoup(text, 'lxml')
     text = soup.get_text()
     tokens = word_tokenize(text)
-    tokens = [token.lower() for token in tokens if token.isalpha() and token.lower() not in stop_words]
+    tokens = tokens = [stemmer.stem(token.lower()) for token in tokens if token.isalpha() and len(token) < 14 and token.lower() not in stop_words]
     return tokens
 
-def collect_vocab(doc_text, vocab, df_dict):
+def getTF(doc_text):
     doc_tf = {}
     for token in doc_text:
-        if token not in doc_tf: # each token only once
-            df_dict[token] = df_dict.get(token, 0) + 1
-            vocab.append(token)
         doc_tf[token] = doc_tf.get(token, 0) + 1
+    doc_tf = {term: freq for term, freq in doc_tf.items() if freq >= 8}
     return doc_tf
+
+def getDF(doc_tf):
+    df_dict = {}
+    for doc_id, tf_dict in doc_tf.items():
+        for term in tf_dict:
+            df_dict[term] = df_dict.get(term, 0) + 1
+    return df_dict
 
 def termTFIDF(term, tf_dict, df_dict, total_docs, token_count):
     return (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1)
@@ -47,31 +58,27 @@ def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_coun
     return bm25_dict
 
 def getVectors(vocab, doc_tfidf, doc_bm25):
-    doc_vecs_tfidf = {}
-    doc_vecs_bm25 = {}
-    term_count = 0
+    doc_ids = list(doc_tfidf.keys())
+    num_docs = len(doc_ids)
+    vocab_size = len(vocab)
 
-    for doc_id in doc_tfidf:
-        doc_vecs_tfidf[doc_id] = []
-        doc_vecs_bm25[doc_id] = []
+    # sparse matrices instead of vectors for memory optimization
+    doc_vecs_tfidf = dok_matrix((num_docs, vocab_size), dtype=np.float32)
+    doc_vecs_bm25 = dok_matrix((num_docs, vocab_size), dtype=np.float32)
 
-    for term in vocab:
-        for doc_id, tfidf_dict in doc_tfidf.items():
-            if term in tfidf_dict:
-                doc_vecs_tfidf[doc_id].append(tfidf_dict[term])
-                doc_vecs_bm25[doc_id].append(doc_bm25[doc_id][term])
-            else:
-                doc_vecs_tfidf[doc_id].append(0)
-                doc_vecs_bm25[doc_id].append(0)
-        term_count+=1        
-        print(f"{term_count}/152322")
-    return doc_vecs_tfidf, doc_vecs_bm25
+    doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(doc_ids)} # map doc_id to indices
+
+    for term_index, term in enumerate(vocab):
+        for doc_id in doc_ids:
+            if term in doc_tfidf[doc_id]:
+                doc_vecs_tfidf[doc_id_to_index[doc_id], term_index] = doc_tfidf[doc_id][term]
+                doc_vecs_bm25[doc_id_to_index[doc_id], term_index] = doc_bm25[doc_id][term]
+    return doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index
                     
 def index(docs, outfile_path):
     vocab = []
     doc_lengths = []
     avg_doc_length = []
-    df_dict = {}
     doc_tfidf = {}
     doc_bm25 = {}
     for doc in docs:
@@ -80,8 +87,9 @@ def index(docs, outfile_path):
             pass
             #raise Exception(f"Empty body in document id: {doc['Id']}")
         doc_lengths.append(len(text))
-        doc_tfidf[doc['Id']] = collect_vocab(text, vocab, df_dict)
-    vocab = list(set(vocab))
+        doc_tfidf[doc['Id']] = getTF(text)
+    df_dict = getDF(doc_tfidf)
+    vocab = list(df_dict.keys())
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
@@ -89,11 +97,11 @@ def index(docs, outfile_path):
         doc_tfidf[doc_id] = getTFIDF(tf_dict, df_dict, len(docs), token_count)
         doc_bm25[doc_id] = getBM25(tf_dict, df_dict, doc_lengths[doc_num], avg_doc_length, len(docs), token_count)
         doc_num += 1
-    doc_vecs_tfidf, doc_vecs_bm25 = getVectors(vocab, doc_tfidf, doc_bm25)
-    save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, outfile_path)
+    doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index = getVectors(vocab, doc_tfidf, doc_bm25)
+    save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path)
 
-def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, outfile_path):
-    objects = [vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25]
+def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path):
+    objects = [vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index]
     with open(outfile_path, 'wb') as f:
         pickle.dump(objects, f)
 
