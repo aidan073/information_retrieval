@@ -1,6 +1,7 @@
 import json
 import pickle
 import math
+import sys
 import numpy as np
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
@@ -23,10 +24,9 @@ def process_text(text): # pre-process text
 def collect_vocab(doc_text, vocab, df_dict):
     doc_tf = {}
     for token in doc_text:
-        if token not in doc_tf.keys(): # each token only once
+        if token not in doc_tf: # each token only once
             df_dict[token] = df_dict.get(token, 0) + 1
-            if token not in vocab:
-                vocab.append(token)
+            vocab.append(token)
         doc_tf[token] = doc_tf.get(token, 0) + 1
     return doc_tf
 
@@ -49,15 +49,22 @@ def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_coun
 def getVectors(vocab, doc_tfidf, doc_bm25):
     doc_vecs_tfidf = {}
     doc_vecs_bm25 = {}
-    index = 0
+    term_count = 0
+
+    for doc_id in doc_tfidf:
+        doc_vecs_tfidf[doc_id] = []
+        doc_vecs_bm25[doc_id] = []
+
     for term in vocab:
         for doc_id, tfidf_dict in doc_tfidf.items():
-            doc_vecs_tfidf.setdefault(doc_id, np.zeros(len(vocab)))
-            doc_vecs_bm25.setdefault(doc_id, np.zeros(len(vocab)))
             if term in tfidf_dict:
-                doc_vecs_tfidf[doc_id][index] = tfidf_dict[term]
-                doc_vecs_bm25[doc_id][index] = doc_bm25[doc_id][term]         
-        index += 1
+                doc_vecs_tfidf[doc_id].append(tfidf_dict[term])
+                doc_vecs_bm25[doc_id].append(doc_bm25[doc_id][term])
+            else:
+                doc_vecs_tfidf[doc_id].append(0)
+                doc_vecs_bm25[doc_id].append(0)
+        term_count+=1        
+        print(f"{term_count}/152322")
     return doc_vecs_tfidf, doc_vecs_bm25
                     
 def index(docs, outfile_path):
@@ -74,6 +81,7 @@ def index(docs, outfile_path):
             #raise Exception(f"Empty body in document id: {doc['Id']}")
         doc_lengths.append(len(text))
         doc_tfidf[doc['Id']] = collect_vocab(text, vocab, df_dict)
+    vocab = list(set(vocab))
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
@@ -90,5 +98,8 @@ def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, outfil
         pickle.dump(objects, f)
 
 if __name__ == "__main__":
-    docs = readJSON('test.json')
-    index(docs, 'index.pkl')
+    sys.argv = ['indexer.py', 'Answers.json', 'index.pkl']
+    if len(sys.argv) <= 1:
+        raise Exception(f"Missing {2-(len(sys.argv)-1)} required argument(s), refer to README")
+    docs = readJSON(sys.argv[1])
+    index(docs, sys.argv[2])

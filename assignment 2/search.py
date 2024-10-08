@@ -19,17 +19,15 @@ def getObjects(filepath):
     return objects
 
 def queryVecs(query, vocab, df_dict, doc_bm25):
-    query_tfidf = np.zeros(len(vocab))
-    query_bm25 = np.zeros(len(vocab))
+    query_tfidf = np.array([])
+    query_bm25 = np.array([])
     word_counts = Counter(query)
-    index = 0
     if len(query) == 0:
         raise Exception("Empty query")
     for term in vocab:
         if term in query and term in df_dict:
-            query_tfidf[index] = indexer.termTFIDF(term, word_counts, df_dict, len(doc_bm25), len(query))
-            query_bm25[index] = indexer.termBM25(term, word_counts, df_dict, 1, 1, len(doc_bm25), len(query))
-        index+=1
+            query_tfidf = np.append(query_tfidf, indexer.termTFIDF(term, word_counts, df_dict, len(doc_bm25), len(query)))
+            query_bm25 = np.append(query_bm25, indexer.termBM25(term, word_counts, df_dict, 1, 1, len(doc_bm25), len(query)))
     return query_tfidf, query_bm25
 
 def compareVecs(q_tfidf_vec, q_bm25_vec, d_tfidf_vec, d_bm25_vec):
