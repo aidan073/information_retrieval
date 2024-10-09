@@ -31,7 +31,6 @@ def getTF(doc_text):
     doc_tf = {}
     for token in doc_text:
         doc_tf[token] = doc_tf.get(token, 0) + 1
-    doc_tf = {term: freq for term, freq in doc_tf.items() if freq >= 8}
     return doc_tf
 
 def getDF(doc_tf):
@@ -39,6 +38,10 @@ def getDF(doc_tf):
     for doc_id, tf_dict in doc_tf.items():
         for term in tf_dict:
             df_dict[term] = df_dict.get(term, 0) + 1
+    return df_dict
+
+def filterDict(df_dict, min_df):
+    df_dict = {term: df for term, df in df_dict.items() if df >= min_df}
     return df_dict
 
 def termTFIDF(term, tf_dict, df_dict, total_docs, token_count):
@@ -89,7 +92,6 @@ def index(docs, outfile_path):
         doc_lengths.append(len(text))
         doc_tfidf[doc['Id']] = getTF(text)
     df_dict = getDF(doc_tfidf)
-    vocab = list(df_dict.keys())
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
@@ -97,6 +99,8 @@ def index(docs, outfile_path):
         doc_tfidf[doc_id] = getTFIDF(tf_dict, df_dict, len(docs), token_count)
         doc_bm25[doc_id] = getBM25(tf_dict, df_dict, doc_lengths[doc_num], avg_doc_length, len(docs), token_count)
         doc_num += 1
+    df_dict = filterDict(df_dict, 3)
+    vocab = list(df_dict.keys())
     doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index = getVectors(vocab, doc_tfidf, doc_bm25)
     save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path)
 
@@ -106,7 +110,7 @@ def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id
         pickle.dump(objects, f)
 
 if __name__ == "__main__":
-    sys.argv = ['indexer.py', 'Answers.json', 'index.pkl']
+    sys.argv = ['indexer.py', 'test.json', 'index.pkl']
     if len(sys.argv) <= 1:
         raise Exception(f"Missing {2-(len(sys.argv)-1)} required argument(s), refer to README")
     docs = readJSON(sys.argv[1])

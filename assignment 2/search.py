@@ -4,6 +4,7 @@ import os
 import json
 import csv
 import sys
+import heapq
 import numpy as np
 from numpy.linalg import norm
 from collections import Counter
@@ -32,8 +33,8 @@ def queryVecs(query, vocab, df_dict, doc_bm25):
 
     for term_index, term in enumerate(vocab):
         if term in query:
-            q_tfidf_vec[1, term_index] = indexer.termTFIDF(term, word_counts, df_dict, len(doc_bm25), len(query))
-            q_bm25_vec[1, term_index] = indexer.termBM25(term, word_counts, df_dict, 1, 1, len(doc_bm25), len(query))
+            q_tfidf_vec[0, term_index] = indexer.termTFIDF(term, word_counts, df_dict, len(doc_bm25), len(query))
+            q_bm25_vec[0, term_index] = indexer.termBM25(term, word_counts, df_dict, 1, 1, len(doc_bm25), len(query))
     return q_tfidf_vec, q_bm25_vec
 
 def compute_cosine_similarity(q_tfidf_vec, q_bm25_vec, d_tfidf_vec, d_bm25_vec):
@@ -47,33 +48,42 @@ def compareVecs(q_tfidf_vec, q_bm25_vec, d_tfidf_vec, d_bm25_vec):
     return tfidf_cos_sim, bm25_cos_sim
 
 def search(queries, vocab, df_dict, doc_bm25, d_tfidf_vecs, d_bm25_vecs, doc_id_to_index, outfile_path_list):
-    override_check = 1
-    for query in queries:
-        id = query['Id']
-        text = query['Title'] + query['Body']
-        text = indexer.process_text(text)
-        query_tfidf_vec, query_bm25_vec = queryVecs(text, vocab, df_dict, doc_bm25)
-        results_tfidf = {}
-        results_bm25 = {}
-        for doc_id in doc_bm25:
-            results_tfidf[doc_id], results_bm25[doc_id] = compareVecs(query_tfidf_vec, query_bm25_vec, d_tfidf_vecs[doc_id_to_index[doc_id]], d_bm25_vecs[doc_id_to_index[doc_id]])
-        results_tfidf = dict(sorted(results_tfidf.items(), key=lambda item: item[1], reverse=True))
-        results_bm25 = dict(sorted(results_bm25.items(), key=lambda item: item[1], reverse=True))
-        writeResult(results_tfidf, id, outfile_path_list[0], override_check)
-        writeResult(results_bm25, id, outfile_path_list[1], override_check)
-        override_check = 0
 
-def writeResult(result_dict, id, outfile_path, override_check):
-    if override_check and os.path.isfile(outfile_path):
-        os.remove(outfile_path)
-    with open(outfile_path, 'a', newline='') as f:
-        writer = csv.writer(f, delimiter='\t')
-        rank = 1
-        for doc_id, score in result_dict.items():
-            writer.writerow([id, 'Q0', doc_id, rank, score, 'vector_search'])
-            rank += 1
-            if rank >= 100:
-                break
+    if os.path.isfile(outfile_path_list[0]):
+        os.remove(outfile_path_list[0])
+    if os.path.isfile(outfile_path_list[1]):
+        os.remove(outfile_path_list[1])
+
+    f = open(outfile_path_list[0], 'a', newline='')
+    f2 = open(outfile_path_list[1], 'a', newline='')
+    try:
+        for query in queries:
+            id = query['Id']
+            text = query['Title'] + query['Body']
+            text = indexer.process_text(text)
+            query_tfidf_vec, query_bm25_vec = queryVecs(text, vocab, df_dict, doc_bm25)
+            results_tfidf = {}
+            results_bm25 = {}
+            for doc_id in doc_bm25:
+                results_tfidf[doc_id], results_bm25[doc_id] = compute_cosine_similarity(query_tfidf_vec, query_bm25_vec, d_tfidf_vecs[doc_id_to_index[doc_id]], d_bm25_vecs[doc_id_to_index[doc_id]])
+            # results_tfidf = dict(sorted(results_tfidf.items(), key=lambda item: item[1], reverse=True))
+            # results_bm25 = dict(sorted(results_bm25.items(), key=lambda item: item[1], reverse=True))
+            top_tfidf = heapq.nlargest(100, results_tfidf.items(), key=lambda item: item[1])
+            top_bm25 = heapq.nlargest(100, results_bm25.items(), key=lambda item: item[1])
+            writeResult(top_tfidf, id, f)
+            writeResult(top_bm25, id, f2)
+    finally:
+        f.close()
+        f2.close()
+
+def writeResult(result, id, outfile):
+    writer = csv.writer(outfile, delimiter='\t')
+    rank = 1
+    for doc_id, score in result:
+        writer.writerow([id, 'Q0', doc_id, rank, score, 'vector_search'])
+        rank += 1
+        if rank >= 100:
+            break
 sys.argv = ['search.py', 'topics_1.json', 'index.pkl']
 if len(sys.argv) <= 1:
     raise Exception(f"Missing {2-(len(sys.argv)-1)} required argument(s), refer to README")
