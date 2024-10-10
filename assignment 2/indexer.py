@@ -27,10 +27,12 @@ def process_text(text): # pre-process text
     tokens = tokens = [stemmer.stem(token.lower()) for token in tokens if token.isalpha() and len(token) < 14 and token.lower() not in stop_words]
     return tokens
 
-def getTF(doc_text):
+def getTF(doc_text, min_tf):
     doc_tf = {}
     for token in doc_text:
         doc_tf[token] = doc_tf.get(token, 0) + 1
+
+    doc_tf = {token: freq for token, freq in doc_tf.items() if freq >= min_tf}
     return doc_tf
 
 def getDF(doc_tf):
@@ -48,7 +50,7 @@ def termTFIDF(term, tf_dict, df_dict, total_docs, token_count):
     return (1 + math.log(tf_dict[term])) / token_count * (math.log(total_docs / df_dict[term]) + 1)
 
 def getTFIDF(tf_dict, df_dict, total_docs, token_count):
-    tfidf_dict = {term: (0 if token_count == 0 else termTFIDF(term, tf_dict, df_dict, total_docs, token_count)) for term in tf_dict}
+    tfidf_dict = {term: (0 if token_count == 0 else termTFIDF(term, tf_dict, df_dict, total_docs, token_count)) for term in tf_dict if term in df_dict}
     return tfidf_dict
 
 def termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count, k1=1.5, b=0.75):
@@ -57,7 +59,7 @@ def termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, tok
     return math.log((total_docs - df_dict[term] + 0.5) / (df_dict[term] + 0.5) + 1) * (numerator / denominator)
 
 def getBM25(tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count):
-    bm25_dict = {term: termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count) for term in tf_dict}
+    bm25_dict = {term: termBM25(term, tf_dict, df_dict, doc_length, avg_doc_length, total_docs, token_count) for term in tf_dict if term in df_dict}
     return bm25_dict
 
 def getVectors(vocab, doc_tfidf, doc_bm25):
@@ -76,6 +78,7 @@ def getVectors(vocab, doc_tfidf, doc_bm25):
             if term in doc_tfidf[doc_id]:
                 doc_vecs_tfidf[doc_id_to_index[doc_id], term_index] = doc_tfidf[doc_id][term]
                 doc_vecs_bm25[doc_id_to_index[doc_id], term_index] = doc_bm25[doc_id][term]
+        #print(f"{term_index}/{vocab_size}")
     return doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index
                     
 def index(docs, outfile_path):
@@ -90,16 +93,16 @@ def index(docs, outfile_path):
             pass
             #raise Exception(f"Empty body in document id: {doc['Id']}")
         doc_lengths.append(len(text))
-        doc_tfidf[doc['Id']] = getTF(text)
+        doc_tfidf[doc['Id']] = getTF(text, 3)
     df_dict = getDF(doc_tfidf)
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
         token_count = sum(tf_dict.values())
+        df_dict = filterDict(df_dict, 7)
         doc_tfidf[doc_id] = getTFIDF(tf_dict, df_dict, len(docs), token_count)
         doc_bm25[doc_id] = getBM25(tf_dict, df_dict, doc_lengths[doc_num], avg_doc_length, len(docs), token_count)
         doc_num += 1
-    df_dict = filterDict(df_dict, 3)
     vocab = list(df_dict.keys())
     doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index = getVectors(vocab, doc_tfidf, doc_bm25)
     save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path)
@@ -110,7 +113,7 @@ def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id
         pickle.dump(objects, f)
 
 if __name__ == "__main__":
-    sys.argv = ['indexer.py', 'test.json', 'index.pkl']
+    sys.argv = ['indexer.py', 'Answers.json', 'index.pkl']
     if len(sys.argv) <= 1:
         raise Exception(f"Missing {2-(len(sys.argv)-1)} required argument(s), refer to README")
     docs = readJSON(sys.argv[1])

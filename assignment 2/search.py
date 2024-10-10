@@ -9,7 +9,6 @@ import numpy as np
 from numpy.linalg import norm
 from collections import Counter
 from scipy.sparse import dok_matrix, csr_matrix
-from sklearn.metrics.pairwise import cosine_similarity
 
 def getQueries(filepath):
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -37,6 +36,14 @@ def queryVecs(query, vocab, df_dict, doc_bm25):
             q_bm25_vec[0, term_index] = indexer.termBM25(term, word_counts, df_dict, 1, 1, len(doc_bm25), len(query))
     return q_tfidf_vec, q_bm25_vec
 
+def cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0:
+        return 0
+    return dot_product / (norm1 * norm2)
+
 def compute_cosine_similarity(q_tfidf_vec, q_bm25_vec, d_tfidf_vec, d_bm25_vec):
     cos_sim_t = cosine_similarity(q_tfidf_vec, d_tfidf_vec)[0][0]
     cos_sim_b = cosine_similarity(q_bm25_vec, d_bm25_vec)[0][0]
@@ -57,6 +64,7 @@ def search(queries, vocab, df_dict, doc_bm25, d_tfidf_vecs, d_bm25_vecs, doc_id_
     f = open(outfile_path_list[0], 'a', newline='')
     f2 = open(outfile_path_list[1], 'a', newline='')
     try:
+        query_count = 0
         for query in queries:
             id = query['Id']
             text = query['Title'] + query['Body']
@@ -72,6 +80,8 @@ def search(queries, vocab, df_dict, doc_bm25, d_tfidf_vecs, d_bm25_vecs, doc_id_
             top_bm25 = heapq.nlargest(100, results_bm25.items(), key=lambda item: item[1])
             writeResult(top_tfidf, id, f)
             writeResult(top_bm25, id, f2)
+            query_count+=1
+            print(f"{query_count}/{len(queries)}")
     finally:
         f.close()
         f2.close()
