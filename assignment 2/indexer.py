@@ -2,13 +2,11 @@ import json
 import pickle
 import math
 import sys
-import random
 import numpy as np
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from scipy.sparse import dok_matrix, csr_matrix
-from sklearn.metrics.pairwise import cosine_similarity
+from scipy.sparse import dok_matrix
 from nltk.stem import PorterStemmer
 
 stemmer = PorterStemmer()
@@ -67,16 +65,21 @@ def getVectors(vocab, doc_tfidf, doc_bm25):
     num_docs = len(doc_ids)
     vocab_size = len(vocab)
 
-    doc_vecs_tfidf = np.zeros((num_docs, vocab_size), dtype=np.float32)
-    doc_vecs_bm25 = np.zeros((num_docs, vocab_size), dtype=np.float32)
+    # sparse matrices instead of vectors for memory optimization
+    doc_vecs_tfidf = dok_matrix((num_docs, vocab_size), dtype=np.float32)
+    doc_vecs_bm25 = dok_matrix((num_docs, vocab_size), dtype=np.float32)
 
-    for doc_index, doc_id in enumerate(doc_ids):
-        for term_index, term in enumerate(vocab):
+    doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(doc_ids)} # map doc_id to indices
+
+    for term_index, term in enumerate(vocab):
+        for doc_id in doc_ids:
             if term in doc_tfidf[doc_id]:
-                doc_vecs_tfidf[doc_index, term_index] = doc_tfidf[doc_id][term]
-                doc_vecs_bm25[doc_index, term_index] = doc_bm25[doc_id][term]
-
-    return doc_vecs_tfidf, doc_vecs_bm25
+                doc_vecs_tfidf[doc_id_to_index[doc_id], term_index] = doc_tfidf[doc_id][term]
+                doc_vecs_bm25[doc_id_to_index[doc_id], term_index] = doc_bm25[doc_id][term]
+        #print(f"{term_index}/{vocab_size}")
+    doc_vecs_bm25 = doc_vecs_bm25.tocsr()
+    doc_vecs_tfidf = doc_vecs_tfidf.tocsr()
+    return doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index
                     
 def index(docs, outfile_path):
     vocab = []
@@ -90,27 +93,27 @@ def index(docs, outfile_path):
             pass
             #raise Exception(f"Empty body in document id: {doc['Id']}")
         doc_lengths.append(len(text))
-        doc_tfidf[doc['Id']] = getTF(text, 3)
+        doc_tfidf[doc['Id']] = getTF(text, 5)
     df_dict = getDF(doc_tfidf)
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
     for doc_id, tf_dict in doc_tfidf.items():
         token_count = sum(tf_dict.values())
-        df_dict = filterDict(df_dict, 7)
+        df_dict = filterDict(df_dict, 15)
         doc_tfidf[doc_id] = getTFIDF(tf_dict, df_dict, len(docs), token_count)
         doc_bm25[doc_id] = getBM25(tf_dict, df_dict, doc_lengths[doc_num], avg_doc_length, len(docs), token_count)
         doc_num += 1
     vocab = list(df_dict.keys())
-    doc_vecs_tfidf, doc_vecs_bm25 = getVectors(vocab, doc_tfidf, doc_bm25)
-    save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, outfile_path)
+    doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index = getVectors(vocab, doc_tfidf, doc_bm25)
+    save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path)
 
-def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, outfile_path):
-    objects = [vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25]
+def save_objects(vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index, outfile_path):
+    objects = [vocab, df_dict, doc_bm25, doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index]
     with open(outfile_path, 'wb') as f:
         pickle.dump(objects, f)
 
 if __name__ == "__main__":
-    sys.argv = ['indexer.py', 'test.json', 'index.pkl']
+    sys.argv = ['indexer.py', 'Answers.json', 'index.pkl']
     if len(sys.argv) <= 1:
         raise Exception(f"Missing {2-(len(sys.argv)-1)} required argument(s), refer to README")
     docs = readJSON(sys.argv[1])
