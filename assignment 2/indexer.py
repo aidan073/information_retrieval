@@ -6,7 +6,6 @@ import numpy as np
 from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from scipy.sparse import dok_matrix
 from nltk.stem import PorterStemmer
 
 stemmer = PorterStemmer()
@@ -65,20 +64,18 @@ def getVectors(vocab, doc_tfidf, doc_bm25):
     num_docs = len(doc_ids)
     vocab_size = len(vocab)
 
-    # sparse matrices instead of vectors for memory optimization
-    doc_vecs_tfidf = dok_matrix((num_docs, vocab_size), dtype=np.float32)
-    doc_vecs_bm25 = dok_matrix((num_docs, vocab_size), dtype=np.float32)
+    doc_vecs_tfidf = np.zeros((num_docs, vocab_size), dtype=np.float32)
+    doc_vecs_bm25 = np.zeros((num_docs, vocab_size), dtype=np.float32)
 
-    doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(doc_ids)} # map doc_id to indices
+    doc_id_to_index = {doc_id: idx for idx, doc_id in enumerate(doc_ids)}  # map doc_id to indices
 
     for term_index, term in enumerate(vocab):
         for doc_id in doc_ids:
             if term in doc_tfidf[doc_id]:
                 doc_vecs_tfidf[doc_id_to_index[doc_id], term_index] = doc_tfidf[doc_id][term]
                 doc_vecs_bm25[doc_id_to_index[doc_id], term_index] = doc_bm25[doc_id][term]
-        #print(f"{term_index}/{vocab_size}")
-    doc_vecs_bm25 = doc_vecs_bm25.tocsr()
-    doc_vecs_tfidf = doc_vecs_tfidf.tocsr()
+        # print(f"{term_index}/{vocab_size}")
+
     return doc_vecs_tfidf, doc_vecs_bm25, doc_id_to_index
                     
 def index(docs, outfile_path):
@@ -93,7 +90,7 @@ def index(docs, outfile_path):
             pass
             #raise Exception(f"Empty body in document id: {doc['Id']}")
         doc_lengths.append(len(text))
-        doc_tfidf[doc['Id']] = getTF(text, 5)
+        doc_tfidf[doc['Id']] = getTF(text, 2)
     df_dict = getDF(doc_tfidf)
     avg_doc_length = sum(doc_lengths) / len(doc_lengths)
     doc_num = 0
